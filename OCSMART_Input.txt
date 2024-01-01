@@ -1,0 +1,5 @@
+l1b_path = ./L1B/
+geo_path = ./GEO/
+l2_path = ./L2/
+solz_limit = 70.0
+senz_limit = 70.0
