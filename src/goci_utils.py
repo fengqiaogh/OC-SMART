@@ -13,13 +13,15 @@ PARAM_INDEX_B = 14
 PARAM_INDEX_C = 22
 PARAM_INDEX_D = 31
 
-def goci_slots(nav_data, height, width, band):
+def goci_slots(nav_data, sline, eline, spixl, epixl, band):
+    height, width = eline-sline, epixl-spixl
     di = np.full([height, width, 16], float('-inf'))
 
     for slot_index in range(16):
-        y, x = np.mgrid[0:height, 0:width]
+        y, x = np.mgrid[sline:eline, spixl:epixl]
         sbp = nav_data[band * 16 + slot_index]
-        sbp = np.hstack((sbp[4], sbp[5], sbp[6], sbp[7], sbp[13][:9], sbp[15][:8], sbp[17][:9], sbp[19][:8]))
+        sbp = np.hstack((sbp[4], sbp[5], sbp[6], sbp[7],
+                        sbp[13][:9], sbp[15][:8], sbp[17][:9], sbp[19][:8]))
 
         x = (x - sbp[0]) / sbp[2]
         y = (y - sbp[1]) / sbp[3]
@@ -56,9 +58,10 @@ def goci_slots(nav_data, height, width, band):
 
         print("\tFinished slot", slot_index)
 
-    slots = np.argmax(di, axis = 2) + 1
-    slots[np.amax(di, axis = 2) == float('-inf')] = -1
+    slots = np.argmax(di, axis=2) + 1
+    slots[np.amax(di, axis=2) == float('-inf')] = -1
     return slots
+
 
 def goci_slots_time(nav_data):
     rel_time = np.zeros(16)
@@ -69,6 +72,7 @@ def goci_slots_time(nav_data):
     rel_time /= 8
     return rel_time
 
+
 def goci_solar_angles(year, month, day, hour, minute, second, latitude, longitude):
     # Calculate difference in days between the current Julian Day and JD 2451545.0, which is noon 1 January 2000 Universal Time
     EARTH_RADIUS_KM = 6371.0
@@ -78,7 +82,7 @@ def goci_solar_angles(year, month, day, hour, minute, second, latitude, longitud
     # Calculate current Julian Day
     liAux1 = (month - 14) // 12
     liAux2 = (1461 * (year + 4800 + liAux1)) // 4 + (367 * (month - 2 - 12 * liAux1)) // 12 - (
-                3 * ((year + 4900 + liAux1) // 100)) // 4 + day - 32075
+        3 * ((year + 4900 + liAux1) // 100)) // 4 + day - 32075
     dJulianDate = liAux2 - 0.5 + dDecimalHours / 24
 
     # Calculate difference between current Julian Day and JD 2451545.0
@@ -90,7 +94,8 @@ def goci_solar_angles(year, month, day, hour, minute, second, latitude, longitud
     dMeanAnomaly = 6.2400600 + 0.0172019699 * dElapsedJulianDays
     dEclipticLongitude = dMeanLongitude + 0.03341607 * np.sin(dMeanAnomaly) + 0.00034894 * np.sin(
         2 * dMeanAnomaly) - 0.0001134 - 0.0000203 * np.sin(dOmega)
-    dEclipticObliquity = 0.4090928 - 6.2140e-9 * dElapsedJulianDays + 0.0000396 * np.cos(dOmega)
+    dEclipticObliquity = 0.4090928 - 6.2140e-9 * \
+        dElapsedJulianDays + 0.0000396 * np.cos(dOmega)
 
     # Calculate celestial coordinates ( RA and DEC ) in radians but without limiting the angle to be less than 2*Pi (i.e., the result may be greater than 2*Pi)
     dSin_EclipticLongitude = np.sin(dEclipticLongitude)
@@ -99,11 +104,14 @@ def goci_solar_angles(year, month, day, hour, minute, second, latitude, longitud
     dRightAscension = np.arctan2(dY, dX)
     if dRightAscension < 0.0:
         dRightAscension = dRightAscension + 2.0 * np.pi
-    dDeclination = np.arcsin(np.sin(dEclipticObliquity) * dSin_EclipticLongitude)
+    dDeclination = np.arcsin(np.sin(dEclipticObliquity)
+                             * dSin_EclipticLongitude)
 
     # Calculate local coordinates ( azimuth and zenith angle ) in degrees
-    dGreenwichMeanSiderealTime = 6.6974243242 + 0.0657098283 * dElapsedJulianDays + dDecimalHours
-    dLocalMeanSiderealTime = np.deg2rad(dGreenwichMeanSiderealTime * 15 + longitude)
+    dGreenwichMeanSiderealTime = 6.6974243242 + \
+        0.0657098283 * dElapsedJulianDays + dDecimalHours
+    dLocalMeanSiderealTime = np.deg2rad(
+        dGreenwichMeanSiderealTime * 15 + longitude)
     dHourAngle = dLocalMeanSiderealTime - dRightAscension
     dLatitudeInRadians = np.deg2rad(latitude)
     dCos_Latitude = np.cos(dLatitudeInRadians)
@@ -114,11 +122,14 @@ def goci_solar_angles(year, month, day, hour, minute, second, latitude, longitud
     dY = -1 * np.sin(dHourAngle)
     dX = np.tan(dDeclination) * dCos_Latitude - dSin_Latitude * dCos_HourAngle
     m_solar_azimuth_angle_degree = np.arctan2(dY, dX)
-    m_solar_azimuth_angle_degree[m_solar_azimuth_angle_degree < 0.0] = m_solar_azimuth_angle_degree[m_solar_azimuth_angle_degree < 0.0] + 2.0 * np.pi
+    m_solar_azimuth_angle_degree[m_solar_azimuth_angle_degree <
+                                 0.0] = m_solar_azimuth_angle_degree[m_solar_azimuth_angle_degree < 0.0] + 2.0 * np.pi
     m_solar_azimuth_angle_degree = np.rad2deg(m_solar_azimuth_angle_degree)
     # Parallax Correction
-    dParallax = (EARTH_RADIUS_KM / ASTRONOMICAL_UNIT) * np.sin(m_solar_zenith_angle_degree)
-    m_solar_zenith_angle_degree = np.rad2deg(m_solar_zenith_angle_degree + dParallax)
+    dParallax = (EARTH_RADIUS_KM / ASTRONOMICAL_UNIT) * \
+        np.sin(m_solar_zenith_angle_degree)
+    m_solar_zenith_angle_degree = np.rad2deg(
+        m_solar_zenith_angle_degree + dParallax)
     return m_solar_zenith_angle_degree, m_solar_azimuth_angle_degree
 
 
@@ -130,7 +141,8 @@ def goci_sensor_zenith(latitude, longitude):
     eslatr = np.deg2rad(latitude)
     r1 = 1.0 + GEOSTATIONARY_ORBIT_ALTITUDE_KM / EARTH_RADIUS_KM
     v1 = r1 * np.cos(eslatr) * np.cos(longdiffr) - 1.0
-    v2 = r1 * np.sqrt(1 - np.cos(eslatr) * np.cos(eslatr) * np.cos(longdiffr) * np.cos(longdiffr))
+    v2 = r1 * np.sqrt(1 - np.cos(eslatr) * np.cos(eslatr) *
+                      np.cos(longdiffr) * np.cos(longdiffr))
     eselevation = np.rad2deg(np.arctan(v1 / v2))
     eselrefracted = eselevation
     eselrefracted[eselevation < 30.0] = (eselevation[eselevation < 30.0] + np.sqrt(
@@ -141,7 +153,10 @@ def goci_sensor_zenith(latitude, longitude):
 
 def goci_sensor_azimuth(latitude, longitude, satellite_longitude):
     longdiffr_rad = np.deg2rad(longitude - satellite_longitude)
-    esazimuth_deg = 180.0 + np.rad2deg(np.arctan(np.tan(longdiffr_rad) / np.sin(np.deg2rad(latitude))))
+    esazimuth_deg = 180.0 + \
+        np.rad2deg(np.arctan(np.tan(longdiffr_rad) /
+                   np.sin(np.deg2rad(latitude))))
     esazimuth_deg[latitude < 0.0] = esazimuth_deg[latitude < 0.0] - 180.0
-    esazimuth_deg[esazimuth_deg < 0.0] = esazimuth_deg[esazimuth_deg < 0.0] + 360.0
+    esazimuth_deg[esazimuth_deg <
+                  0.0] = esazimuth_deg[esazimuth_deg < 0.0] + 360.0
     return esazimuth_deg
